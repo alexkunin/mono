@@ -69,10 +69,7 @@
       ]
     },
     "nx-release-publish": {
-      "dependsOn": ["build"],
-      "options": {
-        "packageRoot": "{workspaceRoot}/libs/{projectName}/dist"
-      }
+      "dependsOn": ["build"]
     }
   },
   "generators": {
