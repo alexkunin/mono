@@ -19,4 +19,4 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
-      - run: npx nx -t lint test build
+      - run: npx nx run-many -t lint test build
