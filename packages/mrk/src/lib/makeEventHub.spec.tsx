@@ -32,6 +32,34 @@ describe('makeProvider', () => {
         expect(queryByText('bar')).toBeTruthy();
     });
 
+    it('should allow to use generated dispatcher', () => {
+        const [ Provider, { useDispatchMy }, useEvent ] = makeEventHub<{
+            my: { foo: string };
+        }>();
+
+        const Sender = () => {
+            const dispatchMyEvent = useDispatchMy();
+            return <button data-testid="button" onClick={ () => dispatchMyEvent({ foo: 'bar' }) }/>;
+        };
+
+        const Subscriber = () => {
+            const [ value, setValue ] = useState<string>();
+            useEvent('my', useCallback(({ foo }) => setValue(foo), []));
+            return value;
+        };
+
+        const { getByTestId, queryByText } = render(
+            <Provider>
+                <Sender/>
+                <Subscriber/>
+            </Provider>,
+        );
+
+        fireEvent.click(getByTestId('button'));
+        expect(queryByText('bar')).toBeTruthy();
+    });
+
+
     it('should allow to use generated subscriber', () => {
         const [ Provider, useDispatch, { useMyEvent } ] = makeEventHub<{
             my: { foo: string };

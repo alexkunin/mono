@@ -5,6 +5,10 @@ type EventMap = { [K in string]: unknown };
 
 type Provider = FunctionComponent<PropsWithChildren>
 
+type DispatcherHookName<K extends string> = `useDispatch${ Capitalize<K> }`;
+
+type DispatcherHookMap<E extends EventMap> = { [K in keyof E & string as DispatcherHookName<K>]: () => (data: E[K]) => void };
+
 type DispatcherHook<E extends EventMap> = () => <K extends keyof E>(event: K, data: E[K]) => void;
 
 type SubscriberHookName<K extends string> = `use${ Capitalize<K> }Event`;
@@ -13,7 +17,7 @@ type SubscriberHookMap<E extends EventMap> = { [K in keyof E & string as Subscri
 
 type SubscriberHook<E extends EventMap> = <K extends keyof E>(event: K, callback: (data: E[K]) => void) => void;
 
-export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E>, SubscriberHook<E> & SubscriberHookMap<E> ] {
+export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E> & DispatcherHookMap<E>, SubscriberHook<E> & SubscriberHookMap<E> ] {
     const [ Provider, hook ] = makeContext(() => new EventTarget());
 
     const cache = Symbol('cache');
@@ -24,6 +28,32 @@ export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E
             eventTarget.dispatchEvent(new CustomEvent<E[K]>(event as string, { detail: data }));
         }, [ eventTarget ]);
     }
+
+    type AugmentedDispatcherHook = DispatcherHook<E> & {
+        [cache]: Record<string, (data: unknown) => unknown>;
+    };
+
+    const dispatcherHookProxy = new Proxy(
+        Object.assign(useDispatcher, { [cache]: {} }) as AugmentedDispatcherHook,
+        {
+            get(
+                target,
+                prop,
+            ) {
+                if (typeof prop !== 'string') {
+                    return;
+                }
+                if (!target[cache][prop]) {
+                    const type = prop.replace(/^useDispatch(\w)(\w+)$/, (_, f, t) => f.toLowerCase() + t);
+                    target[cache][prop] = function useNamedDispatcher() {
+                        const dispatcher = target();
+                        return useCallback(<K extends keyof E>(data: E[K]) => dispatcher(type as K, data), [ dispatcher ]);
+                    };
+                }
+                return target[cache][prop];
+            },
+        },
+    ) as unknown as DispatcherHook<E> & DispatcherHookMap<E>;
 
     function useSubscriber<K extends keyof E>(event: K, handler: (data: E[K]) => void) {
         const eventTarget = hook();
@@ -66,5 +96,5 @@ export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E
         },
     ) as unknown as SubscriberHook<E> & SubscriberHookMap<E>;
 
-    return [ Provider, useDispatcher, subscriberHookProxy ];
+    return [ Provider, dispatcherHookProxy, subscriberHookProxy ];
 }
