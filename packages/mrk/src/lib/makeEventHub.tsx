@@ -1,5 +1,9 @@
 import { FunctionComponent, PropsWithChildren, useCallback, useEffect } from 'react';
 import { makeContext } from './makeContext';
+import { makeTransformer } from './makeTransformer';
+import { makeUncapitalizer } from './makeUncapitalizer';
+import { makeUnprefixer } from './makeUnprefixer';
+import { makeUnsuffixer } from './makeUnsuffixer';
 
 type EventMap = { [K in string]: unknown };
 
@@ -77,6 +81,16 @@ export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E
         [cache]: Record<string, (callback: (data: unknown) => void) => unknown>;
     };
 
+    const passThrough =
+        <T, R>(fn: (input: T) => R) =>
+            (input: T | false) => input === false ? false : fn(input);
+
+    const subscriberNameToEventName = makeTransformer(
+        passThrough(makeUnprefixer('use')),
+        passThrough(makeUnsuffixer('Event')),
+        passThrough(makeUncapitalizer()),
+    );
+
     const subscriberHookProxy = new Proxy(
         Object.assign(useSubscriber, { [cache]: {} }) as AugmentedSubscriberHook,
         {
@@ -88,13 +102,32 @@ export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E
                     return;
                 }
                 if (!target[cache][prop]) {
-                    const type = prop.replace(/^use(\w)(\w+)Event$/, (_, f, t) => f.toLowerCase() + t);
+                    // const type = prop.replace(/^use(\w)(\w+)Event$/, (_, f, t) => f.toLowerCase() + t);
+                    const type = subscriberNameToEventName(prop);
                     target[cache][prop] = (callback: (data: unknown) => void) => target(type, callback);
                 }
                 return target[cache][prop];
             },
         },
     ) as unknown as SubscriberHook<E> & SubscriberHookMap<E>;
+    // const subscriberHookProxy = new Proxy(
+    //     Object.assign(useSubscriber, { [cache]: {} }) as AugmentedSubscriberHook,
+    //     {
+    //         get(
+    //             target,
+    //             prop,
+    //         ) {
+    //             if (typeof prop !== 'string') {
+    //                 return;
+    //             }
+    //             if (!target[cache][prop]) {
+    //                 const type = prop.replace(/^use(\w)(\w+)Event$/, (_, f, t) => f.toLowerCase() + t);
+    //                 target[cache][prop] = (callback: (data: unknown) => void) => target(type, callback);
+    //             }
+    //             return target[cache][prop];
+    //         },
+    //     },
+    // ) as unknown as SubscriberHook<E> & SubscriberHookMap<E>;
 
     return [ Provider, dispatcherHookProxy, subscriberHookProxy ];
 }
