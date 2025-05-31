@@ -16,24 +16,36 @@ const invalidContainerKeys = new Set([
 export type InvalidContainerKey = typeof invalidContainerKeys extends Set<infer K> ? K : never;
 export type ValidContainerKey = Exclude<string, InvalidContainerKey>;
 
-type EmptyContainer = Record<ValidContainerKey, never>;
+export type EmptyContainer = Record<ValidContainerKey, never>;
 
-type Container<T extends Record<ValidContainerKey, unknown> = EmptyContainer> = T;
+export type Container<T extends Record<ValidContainerKey, unknown> = EmptyContainer> = T;
 
-type MergedContainer<A extends Record<ValidContainerKey, unknown>, B extends Record<ValidContainerKey, unknown>> =
+export type MergedContainer<A extends Record<ValidContainerKey, unknown>, B extends Record<ValidContainerKey, unknown>> =
     A extends EmptyContainer ? B :
         B extends EmptyContainer ? A :
             Container<A & B>;
 
-export interface Builder<T extends Record<ValidContainerKey, unknown> = EmptyContainer> {
+export interface Builder<T extends Record<ValidContainerKey, unknown>, Mode extends 'async' | 'sync'> {
     isValidContainerKey(key: unknown): key is ValidContainerKey;
 
-    define<K extends ValidContainerKey, V>(key: K, factory: (container: Container<T>) => V): BuilderImplementation<MergedContainer<T, { [P in K]: V }>>;
+    lazy<K extends ValidContainerKey, V>(key: K, factory: (container: Container<T>) => V): Builder<MergedContainer<T, { [P in K]: V }>, Mode>;
+
+    eager<K extends ValidContainerKey, V>(key: K, factory: (container: Container<T>) => V): Builder<MergedContainer<T, { [P in K]: Awaited<V> }>, V extends Awaited<V> ? Mode : 'async'>;
 }
 
-class BuilderImplementation<T extends Record<ValidContainerKey, unknown> = EmptyContainer> implements Builder<T> {
+const isPromise = <T>(value: unknown): value is Promise<T> => {
+    return !!value && typeof value === 'object' && 'then' in value;
+};
+
+class BuilderImplementation {
     constructor(
-        private readonly container: Container<T>,
+        private definitions: {
+            key: ValidContainerKey;
+            factory: (container: Record<string, unknown>) => unknown;
+            meta: {
+                eager: boolean;
+            };
+        }[] = [],
     ) {
     }
 
@@ -41,39 +53,87 @@ class BuilderImplementation<T extends Record<ValidContainerKey, unknown> = Empty
         return typeof key === 'string' && !invalidContainerKeys.has(key as InvalidContainerKey);
     }
 
-    define<K extends ValidContainerKey, V>(key: K, factory: (container: Container<T>) => V): BuilderImplementation<MergedContainer<T, { [P in K]: V }>> {
+    private internalDefine(
+        key: ValidContainerKey,
+        factory: (container: Record<string, unknown>) => unknown,
+        { eager }: { eager: boolean },
+    ): this {
         if (!this.isValidContainerKey(key)) {
             throw new Error(`Cannot redefine built-in property "${ key }"`);
         }
 
-        if (key in this.container) {
-            throw new Error(`Service "${ key }" is already defined`);
-        }
-
-        Object.defineProperty(this.container, key, {
-            get: () => {
-                const value = factory(this.container);
-                Object.defineProperty(this.container, key, {
-                    value,
-                    writable: false,
-                    configurable: false,
-                    enumerable: true,
-                });
-                return value;
-            },
-            enumerable: true,
-            configurable: true,
+        this.definitions.push({
+            key,
+            factory,
+            meta: { eager },
         });
 
-        return new BuilderImplementation<MergedContainer<T, { [P in K]: V }>>(
-            this.container as MergedContainer<T, { [P in K]: V }>,
-        );
+        return this;
+    }
+
+    lazy(key: ValidContainerKey, factory: (container: Record<string, unknown>) => unknown): this {
+        return this.internalDefine(key, factory, { eager: false });
+    }
+
+    eager(key: ValidContainerKey, factory: (container: Record<string, unknown>) => unknown): this {
+        return this.internalDefine(key, factory, { eager: true });
+    }
+
+    build(): Record<string, unknown> | Promise<Record<string, unknown>> {
+        function build(
+            definitions: BuilderImplementation['definitions'],
+            container: Record<string, unknown> = {},
+        ): Record<string, unknown> | Promise<Record<string, unknown>> {
+            if (definitions.length === 0) {
+                return container;
+            }
+
+            const [ current, ...rest ] = definitions;
+
+            if (Object.prototype.hasOwnProperty.call(container, current.key)) {
+                throw new Error(`Service "${ current.key }" is already defined`);
+            }
+
+            if (current.meta.eager) {
+                const value = current.factory(container);
+                if (isPromise(value)) {
+                    return value.then(resolvedValue => {
+                        container[current.key] = resolvedValue;
+                        return build(rest, container);
+                    });
+                } else {
+                    container[current.key] = value;
+                    return build(rest, container);
+                }
+            } else {
+                Object.defineProperty(container, current.key, {
+                    get: () => {
+                        const value = current.factory(container);
+                        Object.defineProperty(container, current.key, {
+                            value,
+                            writable: true,
+                            configurable: true,
+                        });
+                        return value;
+                    },
+                    enumerable: true,
+                    configurable: true,
+                });
+                return build(rest, container);
+            }
+        }
+
+        return build(this.definitions);
     }
 }
 
-export function makeContainer<T extends Record<ValidContainerKey, unknown>>(definitionFactory: (builder: Builder) => Builder<Container<T>>): Container<T> {
-    const container = Object.create(null);
-    const builder = new BuilderImplementation(container);
-    definitionFactory(builder);
-    return container as Container<T>;
+export function makeContainer<
+    T extends Record<ValidContainerKey, unknown>,
+    Mode extends 'sync' | 'async'
+>(
+    definitionFactory: (builder: Builder<EmptyContainer, 'sync'>) => Builder<Container<T>, Mode>,
+): Mode extends 'sync' ? Container<T> : Promise<Container<T>> {
+    const builder = new BuilderImplementation();
+    definitionFactory(builder as unknown as Builder<EmptyContainer, 'sync'>);
+    return builder.build() as Mode extends 'sync' ? Container<T> : Promise<Container<T>>;
 }
