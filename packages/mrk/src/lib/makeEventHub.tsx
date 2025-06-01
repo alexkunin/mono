@@ -1,5 +1,6 @@
 import { FunctionComponent, PropsWithChildren, useCallback, useEffect } from 'react';
 import { makeContext } from './makeContext';
+import { EventHub } from './EventHub';
 
 type EventMap = { [K in string]: unknown };
 
@@ -18,6 +19,7 @@ type SubscriberHookMap<E extends EventMap> = { [K in keyof E & string as Subscri
 type SubscriberHook<E extends EventMap> = <K extends keyof E>(event: K, callback: (data: E[K]) => void) => void;
 
 export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E> & DispatcherHookMap<E>, SubscriberHook<E> & SubscriberHookMap<E> ] {
+    const hubs: { [key in keyof E]?: EventHub<E[key]> } = {};
     const [ Provider, hook ] = makeContext(() => new EventTarget());
 
     const cache = Symbol('cache');
@@ -25,7 +27,8 @@ export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E
     function useDispatcher<K extends keyof E>() {
         const eventTarget = hook();
         return useCallback((event: K, data: E[K]) => {
-            eventTarget.dispatchEvent(new CustomEvent<E[K]>(event as string, { detail: data }));
+            hubs[event] ??= new EventHub<E[K]>(event as string, undefined, eventTarget);
+            hubs[event].dispatch(data);
         }, [ eventTarget ]);
     }
 
@@ -59,17 +62,8 @@ export function makeEventHub<E extends EventMap>(): [ Provider, DispatcherHook<E
         const eventTarget = hook();
 
         useEffect(() => {
-            const listener = (e: Event) => {
-                if (e.type === event) {
-                    handler((e as CustomEvent<E[K]>).detail);
-                }
-            };
-
-            eventTarget.addEventListener(event as string, listener);
-
-            return () => {
-                eventTarget.removeEventListener(event as string, listener);
-            };
+            hubs[event] ??= new EventHub<E[K]>(event as string, undefined, eventTarget);
+            return hubs[event].subscribe(handler);
         }, [ eventTarget, event, handler ]);
     }
 
