@@ -31,6 +31,8 @@ export interface Builder<T extends Record<ValidContainerKey, unknown>, Mode exte
     lazy<K extends ValidContainerKey, V>(key: K, factory: (container: Container<T>) => V): Builder<MergedContainer<T, { [P in K]: V }>, Mode>;
 
     eager<K extends ValidContainerKey, V>(key: K, factory: (container: Container<T>) => V): Builder<MergedContainer<T, { [P in K]: Awaited<V> }>, V extends Awaited<V> ? Mode : 'async'>;
+
+    import<R extends Record<ValidContainerKey, unknown>>(container: R): Builder<MergedContainer<T, R>, Mode>;
 }
 
 const isPromise = <T>(value: unknown): value is Promise<T> => {
@@ -79,37 +81,53 @@ class BuilderImplementation {
         return this.internalDefine(key, factory, { eager: true });
     }
 
+    import(container: object): this {
+        for (const key of Object.keys(container)) {
+            if (this.isValidContainerKey(key)) {
+                this.definitions.push({
+                    key: key as ValidContainerKey,
+                    factory: () => (container as Record<ValidContainerKey, unknown>)[key],
+                    meta: { eager: false },
+                });
+            }
+        }
+        return this;
+    }
+
     build(): Record<string, unknown> | Promise<Record<string, unknown>> {
         function build(
             definitions: BuilderImplementation['definitions'],
             container: Record<string, unknown> = {},
+            seenKeys: Set<string> = new Set(),
         ): Record<string, unknown> | Promise<Record<string, unknown>> {
             if (definitions.length === 0) {
                 return container;
             }
 
-            const [ current, ...rest ] = definitions;
+            const [ { factory, key, meta }, ...rest ] = definitions;
 
-            if (Object.prototype.hasOwnProperty.call(container, current.key)) {
-                throw new Error(`Service "${ current.key }" is already defined`);
+            if (seenKeys.has(key)) {
+                throw new Error(`Service "${ key }" is already defined`);
             }
 
-            if (current.meta.eager) {
-                const value = current.factory(container);
+            seenKeys.add(key);
+
+            if (meta.eager) {
+                const value = factory(container);
                 if (isPromise(value)) {
                     return value.then(resolvedValue => {
-                        container[current.key] = resolvedValue;
-                        return build(rest, container);
+                        container[key] = resolvedValue;
+                        return build(rest, container, seenKeys);
                     });
                 } else {
-                    container[current.key] = value;
-                    return build(rest, container);
+                    container[key] = value;
+                    return build(rest, container, seenKeys);
                 }
             } else {
-                Object.defineProperty(container, current.key, {
+                Object.defineProperty(container, key, {
                     get: () => {
-                        const value = current.factory(container);
-                        Object.defineProperty(container, current.key, {
+                        const value = factory(container);
+                        Object.defineProperty(container, key, {
                             value,
                             writable: true,
                             configurable: true,
@@ -119,7 +137,7 @@ class BuilderImplementation {
                     enumerable: true,
                     configurable: true,
                 });
-                return build(rest, container);
+                return build(rest, container, seenKeys);
             }
         }
 

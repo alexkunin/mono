@@ -102,4 +102,65 @@ describe('makeContainer', () => {
         expect(container.b).toEqual({ service: 'b depends on a' });
     });
 
+    it('should allow to compose containers', () => {
+        const containerA = makeContainer(builder => builder
+            .lazy('a', () => ({ service: 'a' })),
+        );
+
+        const containerB = makeContainer(builder => builder
+            .eager('b', () => ({ service: 'b' })),
+        );
+
+        const composedContainer = makeContainer(builder => builder
+            .import(containerA)
+            .import(containerB),
+        );
+
+        expect(composedContainer.a).toEqual({ service: 'a' });
+        expect(composedContainer.b).toEqual({ service: 'b' });
+    });
+
+    it('should preserve laziness when composing containers', () => {
+        const spyA = vi.fn();
+
+        const containerA = makeContainer(builder => builder
+            .lazy('a', () => {
+                spyA();
+                return { service: 'a' };
+            }),
+        );
+
+        const composedContainer = makeContainer(builder => builder
+            .import(containerA)
+        );
+
+        expect(spyA).not.toHaveBeenCalled();
+        expect(composedContainer.a).toEqual({ service: 'a' });
+        expect(spyA).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not be possible to compose containers with the same key', () => {
+        expect(() =>
+            makeContainer(builder => builder
+                .lazy('a', () => ({ service: 'a' }))
+                .import(makeContainer(builder => builder
+                    .lazy('a', () => ({ service: 'b' })),
+                )),
+            ),
+        ).toThrowError('Service "a" is already defined');
+    });
+    
+    it('should allow to depend on a service from imported container', () => {
+        const containerA = makeContainer(builder => builder
+            .lazy('a', () => ({ service: 'a' })),
+        );
+
+        const containerB = makeContainer(builder => builder
+            .import(containerA)
+            .lazy('b', ({ a }) => ({ service: `b depends on ${ a.service }` })),
+        );
+
+        expect(containerB.a).toEqual({ service: 'a' });
+        expect(containerB.b).toEqual({ service: 'b depends on a' });
+    });
 });
