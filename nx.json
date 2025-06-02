@@ -69,7 +69,9 @@
       ]
     },
     "nx-release-publish": {
-      "dependsOn": ["build"]
+      "dependsOn": [
+        "build"
+      ]
     }
   },
   "generators": {

@@ -50,5 +50,10 @@
     "src/**/*.jsx",
     "src/**/*.ts",
     "src/**/*.tsx"
+  ],
+  "references": [
+    {
+      "path": "../mk/tsconfig.lib.json"
+    }
   ]
 }

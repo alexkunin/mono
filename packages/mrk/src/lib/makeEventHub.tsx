@@ -1,6 +1,6 @@
 import { FunctionComponent, PropsWithChildren, useCallback, useEffect } from 'react';
+import { EventHub } from '@alexkunin/mk';
 import { makeContext } from './makeContext';
-import { EventHub } from './EventHub';
 
 type EventMap = { [K in string]: unknown };
 

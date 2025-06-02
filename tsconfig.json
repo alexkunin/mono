@@ -5,6 +5,9 @@
   "references": [
     {
       "path": "./packages/mrk"
+    },
+    {
+      "path": "./packages/mk"
     }
   ]
 }
