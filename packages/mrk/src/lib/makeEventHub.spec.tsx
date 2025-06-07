@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 
 import { makeEventHub } from './makeEventHub';
 
-describe('makeProvider', () => {
+describe('makeEventHub', () => {
 
     it('should allow parametrized subscribing', () => {
         const [ Provider, useDispatch, useEvent ] = makeEventHub<{
