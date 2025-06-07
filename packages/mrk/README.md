@@ -1,7 +1,10 @@
 # @alexkunin/mrk
 
-This library was generated with [Nx](https://nx.dev).
+React specific helpers built on top of `@alexkunin/mk`.
 
-## Running unit tests
+## Contents
 
-Run `nx test @alexkunin/mrk` to execute the unit tests via [Vitest](https://vitest.dev/).
+- [makeContext](src/makeContext/README.md) – create React contexts with lazy initialization.
+- [makeEventHub](src/makeEventHub/README.md) – generate hooks for subscribing and dispatching events.
+
+See the linked README files for details and examples.

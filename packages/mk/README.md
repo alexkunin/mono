@@ -1,27 +1,11 @@
-# mk
+# @alexkunin/mk
 
-This library was generated with [Nx](https://nx.dev).
+Utility functions for building modular TypeScript applications.
 
-## Building
+## Contents
 
-Run `nx build mk` to build the library.
+- [EventHub](src/eventHub/README.md) – typed wrapper around `EventTarget`.
+- [makeContainer](src/makeContainer/README.md) – lightweight service container builder.
+- [makeCommand](src/makeCommand/README.md) – wrap async functions and expose lifecycle events.
 
-## Running unit tests
-
-Run `nx test mk` to execute the unit tests via [Vitest](https://vitest.dev/).
-
-## makeCommand
-
-`makeCommand` wraps an async function and exposes `started`, `completed` and `failed` events using `EventHub`.
-
-```ts
-import { makeCommand } from '@alexkunin/mk';
-
-const increment = makeCommand(async (value: number) => value + 1);
-
-increment.started.subscribe(v => console.log('start', v));
-increment.completed.subscribe(({ result }) => console.log('done', result));
-increment.failed.subscribe(({ error }) => console.error(error));
-
-await increment(1);
-```
+See the linked READMEs for usage examples.
