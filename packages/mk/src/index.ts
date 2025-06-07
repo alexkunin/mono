@@ -1,3 +1,3 @@
-export * from './lib/EventHub';
-export * from './lib/makeContainer';
+export * from './eventHub';
+export * from './makeContainer';
 export * from './lib/makeCommand';

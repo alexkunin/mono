@@ -1,4 +1,4 @@
-import { EventHub } from './EventHub';
+import { EventHub } from '../eventHub';
 
 export interface Command<I, O> {
     (input: I): Promise<O>;
