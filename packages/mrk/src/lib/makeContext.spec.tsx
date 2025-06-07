@@ -80,4 +80,17 @@ describe('makeContext', () => {
         expect(queryByText('bar')).toBeTruthy();
     });
 
+    it('should throw if hook used outside provider', () => {
+        const [ , hook ] = makeContext(() => ({
+            foo: 'bar',
+        }));
+
+        const Consumer = () => {
+            hook();
+            return null;
+        };
+
+        expect(() => render(<Consumer/>)).toThrow('Context is null');
+    });
+
 });
