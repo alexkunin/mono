@@ -1,3 +1,7 @@
+## 0.0.26 (2025-06-07)
+
+* Added `makeCommand` utility for executing async functions with lifecycle events.
+
 ## 0.0.25 (2025-06-07)
 
 This was a version bump only, there were no code changes.
