@@ -2,7 +2,7 @@ import { render } from '@testing-library/react';
 
 import { makeContext } from './makeContext';
 
-describe('makeProvider', () => {
+describe('makeContext', () => {
 
     it('should provide values from initializer function', () => {
         const [ Provider, hook ] = makeContext(() => ({
