@@ -19,5 +19,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "dependencies": {}
+  "dependencies": {
+    "zod": "^3.25.46"
+  }
 }
