@@ -1,6 +1,6 @@
 {
   "name": "@alexkunin/mrk",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -17,6 +17,6 @@
     }
   },
   "dependencies": {
-    "@alexkunin/mk": "0.0.24"
+    "@alexkunin/mk": "0.0.25"
   }
 }
