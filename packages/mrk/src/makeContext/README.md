@@ -9,9 +9,13 @@ import { makeContext } from '@alexkunin/mrk';
 
 const [ Provider, useCtx ] = makeContext(() => ({ value: 'foo' }));
 
-<Provider>
-  <Child />
-</Provider>
+function App() {
+  return (
+    <Provider>
+      <Child />
+    </Provider>
+  );
+}
 
 function Child() {
   const ctx = useCtx();
