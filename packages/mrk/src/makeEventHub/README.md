@@ -11,9 +11,18 @@ const [ Provider, useDispatch, useEvent ] = makeEventHub<{
   ping: string;
 }>();
 
+function App() {
+  return (
+    <Provider>
+      <Sender />
+      <Listener />
+    </Provider>
+  );
+}
+
 function Sender() {
   const dispatch = useDispatch();
-  return <button onClick={() => dispatch('ping', 'pong')}/>;
+  return <button onClick={() => dispatch('ping', 'pong')} />;
 }
 
 function Listener() {
