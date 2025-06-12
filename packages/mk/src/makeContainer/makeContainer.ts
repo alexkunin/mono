@@ -28,6 +28,8 @@ export type MergedContainer<A extends Record<ValidContainerKey, unknown>, B exte
 export interface Builder<T extends Record<ValidContainerKey, unknown>, Mode extends 'async' | 'sync'> {
     isValidContainerKey(key: unknown): key is ValidContainerKey;
 
+    declare<K extends ValidContainerKey>(key: K): { as<V>(): Builder<MergedContainer<T, { [P in K]: V }>, Mode> };
+
     lazy<K extends ValidContainerKey, V>(key: K, factory: (container: Container<T>) => V): Builder<MergedContainer<T, { [P in K]: V }>, Mode>;
 
     eager<K extends ValidContainerKey, V>(key: K, factory: (container: Container<T>) => V): Builder<MergedContainer<T, { [P in K]: Awaited<V> }>, V extends Awaited<V> ? Mode : 'async'>;
@@ -39,13 +41,15 @@ const isPromise = <T>(value: unknown): value is Promise<T> => {
     return !!value && typeof value === 'object' && 'then' in value;
 };
 
+const definitionsKey = Symbol('definitions');
+
 class BuilderImplementation {
     constructor(
         private definitions: {
             key: ValidContainerKey;
             factory: (container: Record<string, unknown>) => unknown;
             meta: {
-                eager: boolean;
+                type: 'eager' | 'lazy' | 'declare';
             };
         }[] = [],
     ) {
@@ -67,10 +71,24 @@ class BuilderImplementation {
         this.definitions.push({
             key,
             factory,
-            meta: { eager },
+            meta: { type: eager ? 'eager' : 'lazy' },
         });
 
         return this;
+    }
+
+    declare(key: ValidContainerKey): { as(): BuilderImplementation } {
+        if (!this.isValidContainerKey(key)) {
+            throw new Error(`Cannot redefine built-in property "${ key }"`);
+        }
+
+        this.definitions.push({
+            key,
+            factory: () => ({}),
+            meta: { type: 'declare' },
+        });
+
+        return { as: () => this };
     }
 
     lazy(key: ValidContainerKey, factory: (container: Record<string, unknown>) => unknown): this {
@@ -82,12 +100,18 @@ class BuilderImplementation {
     }
 
     import(container: object): this {
+        const definitions = (container as { [key in typeof definitionsKey]?: typeof this.definitions })[definitionsKey];
+        if (definitions) {
+            this.definitions.push(...definitions);
+            return this;
+        }
+
         for (const key of Object.keys(container)) {
             if (this.isValidContainerKey(key)) {
                 this.definitions.push({
                     key: key as ValidContainerKey,
                     factory: () => (container as Record<ValidContainerKey, unknown>)[key],
-                    meta: { eager: false },
+                    meta: { type: 'lazy' },
                 });
             }
         }
@@ -97,8 +121,9 @@ class BuilderImplementation {
     build(): Record<string, unknown> | Promise<Record<string, unknown>> {
         function build(
             definitions: BuilderImplementation['definitions'],
-            container: Record<string, unknown> = {},
+            container: Record<string, unknown>,
             seenKeys: Set<string> = new Set(),
+            seenDeclaredKeys: Set<string> = new Set(),
         ): Record<string, unknown> | Promise<Record<string, unknown>> {
             if (definitions.length === 0) {
                 return container;
@@ -110,18 +135,36 @@ class BuilderImplementation {
                 throw new Error(`Service "${ key }" is already defined`);
             }
 
+            if (meta.type === 'declare') {
+                if (seenDeclaredKeys.has(key)) {
+                    throw new Error(`Service "${ key }" is already declared`);
+                }
+                Object.defineProperty(container, key, {
+                    get: () => {
+                        throw new Error(`Declared service "${ key }" is not provided`);
+                    },
+                    enumerable: true,
+                    configurable: true,
+                });
+                seenDeclaredKeys.add(key);
+                return build(rest, container, seenKeys, seenDeclaredKeys);
+            }
+
             seenKeys.add(key);
 
-            if (meta.eager) {
+            if (meta.type === 'eager') {
+                if (seenDeclaredKeys.has(key)) {
+                    throw new Error(`Declared service "${ key }" cannot be provided eagerly`);
+                }
                 const value = factory(container);
                 if (isPromise(value)) {
                     return value.then(resolvedValue => {
                         container[key] = resolvedValue;
-                        return build(rest, container, seenKeys);
+                        return build(rest, container, seenKeys, seenDeclaredKeys);
                     });
                 } else {
                     container[key] = value;
-                    return build(rest, container, seenKeys);
+                    return build(rest, container, seenKeys, seenDeclaredKeys);
                 }
             } else {
                 Object.defineProperty(container, key, {
@@ -137,11 +180,21 @@ class BuilderImplementation {
                     enumerable: true,
                     configurable: true,
                 });
-                return build(rest, container, seenKeys);
+                return build(rest, container, seenKeys, seenDeclaredKeys);
             }
         }
 
-        return build(this.definitions);
+        const container: Record<string, unknown> = Object.create(null);
+
+        Object.defineProperty(container, definitionsKey, {
+            get: () => {
+                return this.definitions;
+            },
+            enumerable: false,
+            configurable: false,
+        });
+
+        return build(this.definitions, container);
     }
 }
 

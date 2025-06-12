@@ -1,5 +1,5 @@
 import { describe } from 'vitest';
-import { Builder, EmptyContainer, makeContainer } from './makeContainer';
+import { Builder, EmptyContainer, makeContainer } from './makeContainer.js';
 
 describe('makeContainer', () => {
     it('should allow to lazy a service', () => {
@@ -131,7 +131,7 @@ describe('makeContainer', () => {
         );
 
         const composedContainer = makeContainer(builder => builder
-            .import(containerA)
+            .import(containerA),
         );
 
         expect(spyA).not.toHaveBeenCalled();
@@ -149,7 +149,7 @@ describe('makeContainer', () => {
             ),
         ).toThrowError('Service "a" is already defined');
     });
-    
+
     it('should allow to depend on a service from imported container', () => {
         const containerA = makeContainer(builder => builder
             .lazy('a', () => ({ service: 'a' })),
@@ -162,5 +162,88 @@ describe('makeContainer', () => {
 
         expect(containerB.a).toEqual({ service: 'a' });
         expect(containerB.b).toEqual({ service: 'b depends on a' });
+    });
+
+    describe('declare', () => {
+        it('should allow to provide lazy implementation of declared service', () => {
+            const container = makeContainer(builder => builder
+                .declare('a').as<{ service: 'a' }>()
+                .lazy('a', () => ({ service: 'a' })),
+            );
+
+            expect(container.a).toEqual({ service: 'a' });
+        });
+
+        it('should not allow to provide eager implementation of declared service', () => {
+            expect(() =>
+                makeContainer(builder => builder
+                    .declare('a').as<{ service: 'a' }>()
+                    .eager('a', () => ({ service: 'a' })),
+                ),
+            ).toThrowError('Declared service "a" cannot be provided eagerly');
+        });
+
+        it('should throw if declared service is eagerly used before provided', () => {
+            expect(() =>
+                makeContainer(builder => builder
+                    .declare('a').as<{ service: 'a' }>()
+                    .eager('b', ({ a }) => ({ service: `b depends on ${ a.service }` })),
+                ),
+            ).toThrowError('Declared service "a" is not provided');
+        });
+
+        it('should throw if declared service is requested but not provided', () => {
+            const container = makeContainer(builder => builder
+                .declare('a').as<{ service: 'a' }>(),
+            );
+            expect(() => container.a).toThrowError('Declared service "a" is not provided');
+        });
+
+        it('should throw if declared service is provided twice', () => {
+            expect(() =>
+                makeContainer(builder => builder
+                    .declare('a').as<{ service: 'a' }>()
+                    .lazy('a', () => ({ service: 'a1' }))
+                    .lazy('a', () => ({ service: 'a2' })),
+                ),
+            ).toThrowError('Service "a" is already defined');
+        });
+
+        it('should allow to provide service for imported container', () => {
+            const containerA = makeContainer(builder => builder
+                .declare('a').as<{ service: 'a' }>(),
+            );
+
+            const containerB = makeContainer(builder => builder
+                .import(containerA)
+                .lazy('b', ({ a }) => ({ service: `b depends on ${ a.service }` })),
+            );
+
+            const composedContainer = makeContainer(builder => builder
+                .import(containerB)
+                .lazy('a', () => ({ service: 'a' })),
+            );
+
+            expect(composedContainer.a).toEqual({ service: 'a' });
+            expect(composedContainer.b).toEqual({ service: 'b depends on a' });
+        });
+
+        it('should not allow to declared service more than once', () => {
+            expect(() =>
+                makeContainer(builder => builder
+                    .declare('a').as<{ service: 'a' }>()
+                    .declare('a').as<{ service: 'a' }>(),
+                ),
+            ).toThrowError('Service "a" is already declared');
+        });
+
+        it('should not allow to declare service with the same name as existing service', () => {
+            expect(() =>
+                makeContainer(builder => builder
+                    .lazy('a', () => ({ service: 'a' }))
+                    .declare('a').as<{ service: 'a' }>(),
+                ),
+            ).toThrowError('Service "a" is already defined');
+        });
     });
 });
